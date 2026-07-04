@@ -21,6 +21,14 @@ This fork currently:
 
 This makes Krea 2 NVFP4 usable on MPS, but it is not the final performance target. The CPU fallback is a stable integration point for the planned Metal NVFP4 kernel.
 
+The NVFP4 backend can be controlled with:
+
+- `FP8_MPS_METAL_NVFP4_BACKEND=auto`
+- `FP8_MPS_METAL_NVFP4_BACKEND=metal`
+- `FP8_MPS_METAL_NVFP4_BACKEND=cpu`
+
+Set `FP8_MPS_METAL_NVFP4_VERBOSE=1` to log which backend handled each fallback.
+
 ## Quick Start for ComfyUI Users
 
 **This is the easiest way to use FP8 models in ComfyUI on Apple Silicon:**
@@ -60,6 +68,14 @@ pip install -e .
 ```
 
 No Xcode required. The Metal shader compiles at runtime via `torch.mps.compile_shader()`.
+
+## NVFP4 Benchmark
+
+Use the benchmark helper to compare Metal and CPU fallback:
+
+```bash
+python benchmark_nvfp4.py --rows 1024 --cols 1024 --runs 10
+```
 
 ## What This Solves
 
