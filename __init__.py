@@ -1,11 +1,11 @@
 """
-ComfyUI Custom Node: FP8 MPS Metal Support
+ComfyUI Custom Node: FP8/NVFP4 MPS Metal Support
 
 This custom node automatically installs patches to enable FP8 (Float8_e4m3fn) 
-support on Apple Silicon MPS backend for ComfyUI.
+and NVFP4 support on Apple Silicon MPS backend for ComfyUI.
 
 Installation:
-    Copy this entire repository to ComfyUI/custom_nodes/fp8-mps-metal/
+    Copy this entire repository to ComfyUI/custom_nodes/fp8-nvfp4-mps-metal/
 
 The patch will be automatically installed when ComfyUI loads this custom node.
 """
@@ -18,15 +18,17 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-# Import and install the patch
+# Import and install the patches
 try:
     import fp8_mps_patch
+    import nvfp4_mps_patch
     
     # Install the patch automatically
     if not fp8_mps_patch.is_installed():
         fp8_mps_patch.install()
+        nvfp4_installed = nvfp4_mps_patch.install()
         print("\n" + "=" * 70)
-        print("✓ FP8 MPS Metal patch installed successfully!")
+        print("✓ FP8/NVFP4 MPS Metal patch installed successfully!")
         print("=" * 70)
         print("Float8_e4m3fn operations on MPS are now supported.")
         print("This enables:")
@@ -34,11 +36,15 @@ try:
         print("  • FP8 quantization on MPS")
         print("  • FP8 stochastic rounding (.copy_() operations)")
         print("  • FP8 matrix multiplication via Metal kernels")
+        if nvfp4_installed:
+            print("  • NVFP4 dequantization fallback for Krea 2 on MPS")
         print("  • Large VAE tensor handling (automatic CPU fallback)")
         print("  • MPS fallback for unsupported operations")
         print("=" * 70 + "\n")
     else:
-        print("[fp8-mps-metal] Patch already installed")
+        if not nvfp4_mps_patch.is_installed():
+            nvfp4_mps_patch.install()
+        print("[fp8-nvfp4-mps-metal] Patch already installed")
         
 except Exception as e:
     print("\n" + "!" * 70)
@@ -47,7 +53,7 @@ except Exception as e:
     print(f"Error: {e}")
     print("FP8 operations on MPS will not work without this patch.")
     print("Please report this issue at:")
-    print("https://github.com/audiohacking/fp8-mps-metal/issues")
+    print("https://github.com/akblissweb/fp8-nvfp4-mps-metal/issues")
     print("!" * 70 + "\n")
     import traceback
     traceback.print_exc()

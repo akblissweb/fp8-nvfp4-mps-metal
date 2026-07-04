@@ -1,10 +1,25 @@
-# fp8-mps-metal
+# fp8-nvfp4-mps-metal
 
-**Custom FP8 compute kernels for Apple Silicon (MPS) — fixing what PyTorch doesn't support yet.**
+**Metal acceleration and compatibility patches for FP8 and NVFP4 ComfyUI models on Apple Silicon.**
 
-If you've tried to run FLUX, SD3.5, or any FP8-quantized model on your Mac and hit cryptic errors like `"does not have support for that dtype"` or `"_scaled_mm not implemented for MPS"` — this is the fix. This repo contains a Metal compute shader that performs FP8 (e4m3fn) dequantization and matrix multiplication directly on the GPU, exposed to PyTorch as a drop-in monkey-patch.
+If you've tried to run FLUX, SD3.5, Krea 2, or other quantized models on your Mac and hit cryptic errors like `"does not have support for that dtype"`, `"_scaled_mm not implemented for MPS"`, or `"Undefined type Float8_e4m3fn"` — this project patches those MPS gaps.
+
+This fork extends `fp8-mps-metal` with NVFP4 compatibility for Krea 2 on Apple Silicon. The current NVFP4 path is a correctness-first CPU fallback for `comfy_kitchen.dequantize_nvfp4`; the next milestone is replacing that fallback with a Metal NVFP4 dequantization kernel.
 
 > **Tested on:** M4 Pro (48GB), macOS 26.2, PyTorch 2.10.0, Python 3.12
+
+## Current NVFP4 Status
+
+Krea 2 NVFP4 can fail on Apple Silicon during sampling when Comfy Kitchen falls back to `dequantize_nvfp4` and touches FP8 block scales on MPS.
+
+This fork currently:
+
+- detects MPS tensors passed to `comfy_kitchen.dequantize_nvfp4`
+- dequantizes them with Comfy Kitchen's eager CPU implementation
+- moves the result back to MPS
+- records fallback call counts, shapes, and timings for profiling
+
+This makes Krea 2 NVFP4 usable on MPS, but it is not the final performance target. The CPU fallback is a stable integration point for the planned Metal NVFP4 kernel.
 
 ## Quick Start for ComfyUI Users
 
@@ -12,7 +27,7 @@ If you've tried to run FLUX, SD3.5, or any FP8-quantized model on your Mac and h
 
 ### Automatic
 
-Browse `ComfyUI > Manage Extensions` and search for `fp8-mps-metal`
+This fork is not published to the ComfyUI registry yet. Use manual installation for now.
 
 <img width="600" alt="ComfyUI Extension" src="https://github.com/user-attachments/assets/11024d0e-5b2a-413e-8d78-25ee59e3eb27" />
 
@@ -21,7 +36,7 @@ Browse `ComfyUI > Manage Extensions` and search for `fp8-mps-metal`
 
 ```bash
 cd /Users/USERNAME/Documents/ComfyUI/custom_nodes
-git clone https://github.com/audiohacking/fp8-mps-metal.git
+git clone https://github.com/akblissweb/fp8-nvfp4-mps-metal.git
 ```
 
 That's it! The patch will automatically load when ComfyUI starts. You'll see a message confirming it's installed.
@@ -29,8 +44,8 @@ That's it! The patch will automatically load when ComfyUI starts. You'll see a m
 ## Quick Start for Other Users
 
 ```bash
-git clone https://github.com/audiohacking/fp8-mps-metal.git
-cd fp8-mps-metal
+git clone https://github.com/akblissweb/fp8-nvfp4-mps-metal.git
+cd fp8-nvfp4-mps-metal
 
 # Option A: Pure Python (no compilation needed — recommended)
 python -c "
@@ -301,8 +316,8 @@ export PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0
 export PYTORCH_ENABLE_MPS_FALLBACK=1
 
 # For FP8 models (FLUX, SD3.5):
-# Install fp8-mps-metal and add to ComfyUI's startup
-pip install -e /path/to/fp8-mps-metal
+# Install fp8-nvfp4-mps-metal and add to ComfyUI's startup
+pip install -e /path/to/fp8-nvfp4-mps-metal
 # Add to ComfyUI/main.py or a custom node:
 import fp8_mps_patch; fp8_mps_patch.install()
 
@@ -463,4 +478,3 @@ This repository includes GitHub Actions workflows that automatically test:
 See `.github/workflows/test-mps.yml` for details.
 
 **Note:** GitHub Actions hosted runners do not have Apple Silicon, so full MPS Metal kernel tests must be run locally on compatible hardware.
-

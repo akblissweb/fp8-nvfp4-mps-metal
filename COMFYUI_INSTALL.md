@@ -29,7 +29,7 @@ This patch fixes it!
 
 3. Clone this repository:
    ```bash
-   git clone https://github.com/audiohacking/fp8-mps-metal.git
+   git clone https://github.com/akblissweb/fp8-nvfp4-mps-metal.git
    ```
 
 4. Restart ComfyUI
@@ -65,7 +65,7 @@ This is normal if you restart ComfyUI multiple times. The patch persists in memo
 
 ### Still getting the error
 
-1. **Check the custom_nodes directory**: Make sure `fp8-mps-metal` is actually in your custom_nodes folder
+1. **Check the custom_nodes directory**: Make sure `fp8-nvfp4-mps-metal` is actually in your custom_nodes folder
 2. **Check the console**: Look for the installation success message
 3. **Try manual installation**: See "Alternative Installation Methods" below
 
@@ -86,8 +86,8 @@ Add this to your ComfyUI startup script or create a new Python file in `custom_n
 import sys
 import os
 
-# Add fp8-mps-metal to path
-fp8_path = "/path/to/fp8-mps-metal"
+# Add fp8-nvfp4-mps-metal to path
+fp8_path = "/path/to/fp8-nvfp4-mps-metal"
 if fp8_path not in sys.path:
     sys.path.insert(0, fp8_path)
 
@@ -112,7 +112,7 @@ except:
 
 To remove the patch:
 
-1. Delete the `fp8-mps-metal` folder from `custom_nodes`
+1. Delete the `fp8-nvfp4-mps-metal` folder from `custom_nodes`
 2. Restart ComfyUI
 
 Or to temporarily disable without removing:
@@ -133,7 +133,7 @@ All FP8 operations are converted to use uint8 views and Metal compute shaders, b
 
 ## Support
 
-- **Issues**: https://github.com/audiohacking/fp8-mps-metal/issues
+- **Issues**: https://github.com/akblissweb/fp8-nvfp4-mps-metal/issues
 - **Documentation**: See README.md for technical details
 - **Performance**: Check MPS_FINDINGS.md for benchmarks
 
