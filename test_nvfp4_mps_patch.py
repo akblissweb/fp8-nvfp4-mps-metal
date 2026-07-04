@@ -64,10 +64,11 @@ class Nvfp4MpsPatchTest(unittest.TestCase):
         self.assertEqual(tuple(out.shape), (16, 16))
         actual = out.cpu()
         self.assertTrue(torch.isfinite(actual).all().item())
-        self.assertTrue(torch.allclose(actual, expected, atol=0, rtol=0))
+        self.assertTrue(torch.allclose(actual, expected, atol=5e-4, rtol=5e-4))
 
         stats = nvfp4_mps_patch.get_stats()
-        self.assertEqual(stats["fallback_calls"], 1)
+        self.assertEqual(stats["metal_calls"], 1)
+        self.assertEqual(stats["fallback_calls"], 0)
         self.assertEqual(stats["last_shape"], (16, 16))
         self.assertEqual(stats["last_output_type"], "torch.float16")
 

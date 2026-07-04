@@ -39,6 +39,38 @@ inline float fp8_e4m3fn_to_float(uint8_t bits) {
     return sign ? -value : value;
 }
 
+// ─── NVFP4 e2m1 → float32 decode ──────────────────────────────────────────
+
+inline float nvfp4_e2m1_to_float(uint8_t bits) {
+    uint mag = bits & 0x7;
+    float value;
+    switch (mag) {
+        case 0: value = 0.0f; break;
+        case 1: value = 0.5f; break;
+        case 2: value = 1.0f; break;
+        case 3: value = 1.5f; break;
+        case 4: value = 2.0f; break;
+        case 5: value = 3.0f; break;
+        case 6: value = 4.0f; break;
+        default: value = 6.0f; break;
+    }
+    return (bits & 0x8) ? -value : value;
+}
+
+inline uint blocked_scale_index(uint row, uint block_col, uint n_col_blocks) {
+    uint row_block = row / 128;
+    uint row_in_block = row % 128;
+    uint col_block = block_col / 4;
+    uint col_in_block = block_col % 4;
+
+    uint tile = row_block * n_col_blocks + col_block;
+    uint row_group = row_in_block / 32;
+    uint row_lane = row_in_block % 32;
+    uint col16 = row_group * 4 + col_in_block;
+
+    return (tile * 32 + row_lane) * 16 + col16;
+}
+
 // ─── float32 → FP8 e4m3fn encode ───────────────────────────────────────────
 
 inline uint8_t float_to_fp8_e4m3fn(float val) {
@@ -233,4 +265,43 @@ kernel void float_to_fp8_kernel(
 ) {
     if (gid >= count) return;
     output[gid] = float_to_fp8_e4m3fn(input[gid]);
+}
+
+
+// ─── NVFP4 → half dequantize ───────────────────────────────────────────────
+
+kernel void nvfp4_to_half_kernel(
+    device const uint8_t* qx [[buffer(0)]],             // (rows, packed_cols)
+    device const float* per_tensor_scale [[buffer(1)]], // scalar
+    device const uint8_t* block_scales [[buffer(2)]],   // FP8 e4m3fn bytes, blocked layout
+    device half* output [[buffer(3)]],                  // (rows, packed_cols * 2)
+    constant uint& rows [[buffer(4)]],
+    constant uint& packed_cols [[buffer(5)]],
+    constant uint& n_col_blocks [[buffer(6)]],
+    constant uint& hi_first [[buffer(7)]],
+    constant uint& count [[buffer(8)]],
+    uint gid [[thread_position_in_grid]]
+) {
+    if (gid >= count) return;
+
+    uint cols = packed_cols * 2;
+    uint row = gid / cols;
+    uint col = gid - row * cols;
+    if (row >= rows) return;
+
+    uint packed = qx[row * packed_cols + (col / 2)];
+    uint nibble;
+    if (hi_first != 0) {
+        nibble = (col % 2 == 0) ? (packed >> 4) : (packed & 0x0F);
+    } else {
+        nibble = (col % 2 == 0) ? (packed & 0x0F) : (packed >> 4);
+    }
+
+    uint block_col = col / 16;
+    uint scale_idx = blocked_scale_index(row, block_col, n_col_blocks);
+
+    float fp4_value = nvfp4_e2m1_to_float(uint8_t(nibble));
+    float block_scale = fp8_e4m3fn_to_float(block_scales[scale_idx]);
+    float scale = per_tensor_scale[0] * block_scale;
+    output[gid] = half(fp4_value * scale);
 }

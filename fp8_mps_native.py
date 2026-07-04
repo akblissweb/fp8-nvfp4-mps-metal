@@ -190,6 +190,60 @@ def fp8_quantize(input: torch.Tensor):
     return output, inv_scale
 
 
+def nvfp4_dequantize(qx: torch.Tensor, per_tensor_scale: torch.Tensor,
+                     block_scales: torch.Tensor, hi_first: bool = True) -> torch.Tensor:
+    """
+    NVFP4 -> FP16 dequantization on Metal GPU.
+
+    qx: (rows, packed_cols) uint8 tensor, two E2M1 FP4 values per byte
+    per_tensor_scale: scalar tensor
+    block_scales: FP8 e4m3fn tensor in Comfy Kitchen's blocked layout
+    Returns: (rows, packed_cols * 2) float16 on MPS
+    """
+    lib = _get_lib()
+
+    if qx.device.type != "mps":
+        qx = qx.to("mps")
+    if per_tensor_scale.device.type != "mps":
+        per_tensor_scale = per_tensor_scale.to("mps")
+    if block_scales.device.type != "mps":
+        block_scales = block_scales.to("mps")
+
+    if qx.dtype != torch.uint8:
+        raise TypeError(f"NVFP4 qx must be uint8, got {qx.dtype}")
+    if qx.dim() != 2:
+        raise ValueError(f"NVFP4 qx must be 2D, got {qx.dim()}D")
+
+    rows, packed_cols = qx.shape
+    if packed_cols % 8 != 0:
+        raise ValueError(f"NVFP4 packed_cols must be divisible by 8, got {packed_cols}")
+
+    block_cols = packed_cols // 8
+    n_col_blocks = (block_cols + 3) // 4
+    count = rows * packed_cols * 2
+
+    qx_u8 = qx.contiguous()
+    block_scales_u8 = block_scales.contiguous().view(torch.uint8)
+    scale = per_tensor_scale.to(device="mps", dtype=torch.float32).reshape(-1).contiguous()
+    output = torch.empty((rows, packed_cols * 2), dtype=torch.float16, device="mps")
+
+    lib.nvfp4_to_half_kernel(
+        qx_u8.view(-1),
+        scale,
+        block_scales_u8.view(-1),
+        output.view(-1),
+        rows,
+        packed_cols,
+        n_col_blocks,
+        1 if hi_first else 0,
+        count,
+        threads=(count,),
+        group_size=(256,),
+    )
+
+    return output
+
+
 def fp8_scaled_mm_auto(A: torch.Tensor, B: torch.Tensor,
                        scale_a: torch.Tensor, scale_b: torch.Tensor) -> torch.Tensor:
     """

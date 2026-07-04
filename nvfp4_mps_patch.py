@@ -30,6 +30,8 @@ _installed = False
 @dataclass
 class Nvfp4FallbackStats:
     calls: int = 0
+    metal_calls: int = 0
+    metal_seconds: float = 0.0
     fallback_calls: int = 0
     fallback_seconds: float = 0.0
     elements: int = 0
@@ -42,6 +44,10 @@ _stats = Nvfp4FallbackStats()
 
 def _verbose_enabled() -> bool:
     return os.environ.get("FP8_MPS_METAL_NVFP4_VERBOSE", "").lower() in {"1", "true", "yes", "on"}
+
+
+def _backend_mode() -> str:
+    return os.environ.get("FP8_MPS_METAL_NVFP4_BACKEND", "auto").lower()
 
 
 def _tensor_device(tensor: Any) -> torch.device | None:
@@ -90,6 +96,44 @@ def _dequantize_nvfp4_mps_safe(
             output_type,
             hi_first,
         )
+
+    mode = _backend_mode()
+    if mode not in {"auto", "metal", "cpu"}:
+        mode = "auto"
+
+    if mode in {"auto", "metal"}:
+        start = time.perf_counter()
+        try:
+            import fp8_mps_native
+
+            result = fp8_mps_native.nvfp4_dequantize(
+                qx,
+                per_tensor_scale,
+                block_scales,
+                hi_first=hi_first,
+            )
+            if output_type != torch.float16:
+                result = result.to(output_type)
+            elapsed = time.perf_counter() - start
+
+            _stats.metal_calls += 1
+            _stats.metal_seconds += elapsed
+            _stats.elements += int(result.numel())
+            _stats.last_shape = tuple(result.shape)
+            _stats.last_output_type = str(output_type)
+
+            if _verbose_enabled():
+                print(
+                    "[fp8-nvfp4-mps-metal] NVFP4 Metal dequant "
+                    f"shape={tuple(result.shape)} dtype={output_type} time={elapsed:.4f}s"
+                )
+
+            return result
+        except Exception as exc:
+            if mode == "metal":
+                raise
+            if _verbose_enabled():
+                print(f"[fp8-nvfp4-mps-metal] NVFP4 Metal path failed, using CPU fallback: {exc}")
 
     start = time.perf_counter()
     result = _eager_dequantize_nvfp4(
@@ -166,6 +210,8 @@ def is_installed() -> bool:
 def get_stats() -> dict[str, int | float | str | tuple[int, ...] | None]:
     return {
         "calls": _stats.calls,
+        "metal_calls": _stats.metal_calls,
+        "metal_seconds": _stats.metal_seconds,
         "fallback_calls": _stats.fallback_calls,
         "fallback_seconds": _stats.fallback_seconds,
         "elements": _stats.elements,
